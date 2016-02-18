@@ -32,14 +32,14 @@ HOSTER = '90'
 
 
 
-def loadInit():
-    with open(INIT_PROPERTIES, 'r') as f:
-        init = f.read()
-        init = init.split('\n')
-        roomid = init[0].split(':')[1]
-        #username = init[1].split(':')[1]
-        #password = init[2].split(':')[1]
-        return roomid
+# def loadInit():
+#     with open(INIT_PROPERTIES, 'r') as f:
+#         init = f.read()
+#         init = init.split('\n')
+#         roomid = init[0].split(':')[1]
+#         #username = init[1].split(':')[1]
+#         #password = init[2].split(':')[1]
+#         return roomid
 
 
 def notify(title, message):
@@ -51,16 +51,18 @@ def notify(title, message):
         t = '-title {!r}'.format(title)
         m = '-message {!r}'.format(message)
         os.system('terminal-notifier {} -sound default'.format(' '.join([m, t])))
+#             print(nickName + ":" + content)
+#             notify(nickName, content)
 
 def save2Sql(sqlTableName,contentSql,snickSql,LocalTimeSql):
-    print('insql')
-    conn = sqlite3.connect('danmu.db')
+    conn = sqlite3.connect('pandadanmu.db')
     cursor = conn.cursor()
     while LocalTimeSql:
         strEx='insert into '+sqlTableName+' (time, name, word) values ('\
-            +str(LocalTimeSql.pop())+',\''+snickSql.pop()+'\',\''+contentSql.pop()+'\')'
+            +str(LocalTimeSql[0])+',\''+snickSql[0]+'\',\''+contentSql[0]+'\')'
         cursor.execute(strEx)
-        print(strEx)
+        del(LocalTimeSql[0],snickSql[0],contentSql[0])
+        #print(strEx)
     cursor.close()
     conn.commit()
     conn.close()
@@ -69,7 +71,6 @@ def save2Sql(sqlTableName,contentSql,snickSql,LocalTimeSql):
         
 
 def getChatInfo(roomid):
-    print('roomidget')
     with urllib.request.urlopen(CHATINFOURL + roomid) as f:
         data = f.read().decode('utf-8')
         chatInfo = json.loads(data)
@@ -101,7 +102,7 @@ def getChatInfo(roomid):
         threading.Thread(target=keepalive).start()
 
         startTime=str(int(time.time()))
-        conn = sqlite3.connect('danmu.db')
+        conn = sqlite3.connect('pandadanmu.db')
         cursor = conn.cursor()
         sqlTableName='TM'+startTime+'RD'+roomid
         strEx='create table '+sqlTableName+\
@@ -113,115 +114,114 @@ def getChatInfo(roomid):
         contentMsg=list()
         snickMsg=list()
         LocalMsgTime=list()
-        #contentLst=['1','2',3]
-        whileNum=0
         while True:
             recvMsg = s.recv(4)
-            print(whileNum)
             if recvMsg == RECVMSG:
                 recvLen = int.from_bytes(s.recv(2), 'big')
                 recvMsg = s.recv(recvLen)   #ack:0
-                print(recvMsg)
+                #print(recvMsg)
                 recvLen = int.from_bytes(s.recv(4), 'big')
                 s.recv(IGNORE_LEN)
                 recvLen -= IGNORE_LEN
-                chatmsg = s.recv(recvLen)   #chat msg
-                typeContent = re.search(b'\"type\":\"(.*?)\"',chatmsg)
-                print(typeContent)
-                if typeContent:
-                    if typeContent.group(1) == b'1':
-                        try:
-                            contentMsg.append(b''.join(re.findall(b'\"content\":\"(.*?)\"',chatmsg)).decode('unicode_escape'))
-                            snickMsg.append(b''.join(re.findall(b'\"nickName\":\"(.*?)\"',chatmsg)).decode('unicode_escape'))
-                            LocalMsgTime.append(int(time.time()))
-                            if snickMsg[-1]=='丁果' and contentMsg[-1][:4]=='exit':
-                                print('==========get break target======')
-                                whileCodition=False
-                            print(snickMsg[-1]+':'+contentMsg[-1])
-                        except :
-                            print('===GBK encode error, perhaps special string ===')
-                    elif typeContent.group(1) == b'207':
-                        contentSql=copy.deepcopy(contentMsg)
-                        snickSql=copy.deepcopy(snickMsg)
-                        LocalTimeSql=copy.deepcopy(LocalMsgTime)
-                        contentMsg=list()
-                        snickMsg=list()
-                        LocalMsgTime=list()
-                        threading.Thread(target=save2Sql, args=(sqlTableName,contentSql,snickSql,LocalTimeSql,)).start()
-                    else:
-                        pass
+                recvMsg = s.recv(recvLen)#chat msg
+                #print(recvMsg)
+                recvMsg =recvMsg.split(b'{\"type\":')
+                #print(recvMsg)
+                for chatmsg in recvMsg[1:]:
+                    typeContent = re.search(b'\"(\d+)\"',chatmsg)
+                    #print(typeContent)
+                    if typeContent:
+                        if typeContent.group(1) == b'1':
+                            try:
+                                contentMsg.append(b''.join(re.findall(b'\"content\":\"(.*?)\"',chatmsg)).decode('unicode_escape'))
+                                snickMsg.append(b''.join(re.findall(b'\"nickName\":\"(.*?)\"',chatmsg)).decode('unicode_escape'))
+                                LocalMsgTime.append(int(time.time()))
+                                if snickMsg[-1]=='丁果' and contentMsg[-1][:4]=='exit':
+                                    print('==========get break target======')
+                                    whileCodition=False
+                                print(snickMsg[-1]+':'+contentMsg[-1])
+                            except :
+                                print('===GBK encode error, perhaps special string ===')
+                        elif typeContent.group(1) == b'207':
+                            contentSql=copy.deepcopy(contentMsg)
+                            snickSql=copy.deepcopy(snickMsg)
+                            LocalTimeSql=copy.deepcopy(LocalMsgTime)
+                            contentMsg=list()
+                            snickMsg=list()
+                            LocalMsgTime=list()
+                            threading.Thread(target=save2Sql, args=(sqlTableName,contentSql,snickSql,LocalTimeSql,)).start()
+                        elif typeContent.group(1) == b'206':
+                            goldNum=b''.join(re.findall(b'\"content\":\"(.*?)\"',chatmsg)).decode('unicode_escape')
+                            goldNikname=b''.join(re.findall(b'\"nickName\":\"(.*?)\"',chatmsg)).decode('unicode_escape')
+                            strprint=goldNikname+'送给主播'+goldNum+'个竹子'
+                            print(strprint)
+
+# def analyseMsg(recvMsg):
+#     position = kmp.kmp(recvMsg, DELIMITER, KMP_TABLE)
+#     if position == len(recvMsg) - len(DELIMITER):
+#         retLst=formatMsg(recvMsg)
+#     else:
+#         preMsg = recvMsg[:position + len(DELIMITER)]
+#         retLst=formatMsg(preMsg)
+#         # analyse last msg
+#         analyseMsg(recvMsg[position + len(DELIMITER) + IGNORE_LEN:])
+#     return retLst
+
+# # pass one audience alert
+# is_second_audience = False
+# def formatMsg(recvMsg):
+#     try:
+#         jsonMsg = eval(recvMsg)
+#         content = jsonMsg['data']['content']
+#         if jsonMsg['type'] == DANMU_TYPE:
+#             identity = jsonMsg['data']['from']['identity']
+#             nickName = jsonMsg['data']['from']['nickName']
+#             try:
+#                 spIdentity = jsonMsg['data']['from']['sp_identity']
+#                 if spIdentity == SP_MANAGER:
+#                     nickName = '*超管*' + nickName
+#             except Exception as e:
+#                 pass
+#             if identity == MANAGER:
+#                 nickName = '*房管*' + nickName
+#             if identity == HOSTER:
+#                 nickName = '*主播*' + nickName
+#             print(nickName + ":" + content)
+#             notify(nickName, content)
+#         elif jsonMsg['type'] == BAMBOO_TYPE:
+#             nickName = jsonMsg['data']['from']['nickName']
+#             print(nickName + "送给主播[" + content + "]个竹子")
+#             notify(nickName, "送给主播[" + content + "]个竹子")
+#         elif jsonMsg['type'] == AUDIENCE_TYPE:
+#             global is_second_audience
+#             if is_second_audience:
+#                 print('===========观众人数' + content + '==========')
+#                 is_second_audience = False
+#             else:
+#                 is_second_audience = True
+#         else:
+#             pass
+#         retLst=list()
+#         msgTime=str(int(time.time()))
+#         retLst=[nickName,content,msgTime]
+#     except Exception as e:
+#         pass
+#     return retLst
 
 
-
-
-
-
-def analyseMsg(recvMsg):
-    position = kmp.kmp(recvMsg, DELIMITER, KMP_TABLE)
-    if position == len(recvMsg) - len(DELIMITER):
-        retLst=formatMsg(recvMsg)
-    else:
-        preMsg = recvMsg[:position + len(DELIMITER)]
-        retLst=formatMsg(preMsg)
-        # analyse last msg
-        analyseMsg(recvMsg[position + len(DELIMITER) + IGNORE_LEN:])
-    return retLst
-
-# pass one audience alert
-is_second_audience = False
-def formatMsg(recvMsg):
-    try:
-        jsonMsg = eval(recvMsg)
-        content = jsonMsg['data']['content']
-        if jsonMsg['type'] == DANMU_TYPE:
-            identity = jsonMsg['data']['from']['identity']
-            nickName = jsonMsg['data']['from']['nickName']
-            try:
-                spIdentity = jsonMsg['data']['from']['sp_identity']
-                if spIdentity == SP_MANAGER:
-                    nickName = '*超管*' + nickName
-            except Exception as e:
-                pass
-            if identity == MANAGER:
-                nickName = '*房管*' + nickName
-            if identity == HOSTER:
-                nickName = '*主播*' + nickName
-            print(nickName + ":" + content)
-            notify(nickName, content)
-        elif jsonMsg['type'] == BAMBOO_TYPE:
-            nickName = jsonMsg['data']['from']['nickName']
-            print(nickName + "送给主播[" + content + "]个竹子")
-            notify(nickName, "送给主播[" + content + "]个竹子")
-        elif jsonMsg['type'] == AUDIENCE_TYPE:
-            global is_second_audience
-            if is_second_audience:
-                print('===========观众人数' + content + '==========')
-                is_second_audience = False
-            else:
-                is_second_audience = True
-        else:
-            pass
-        retLst=list()
-        msgTime=str(int(time.time()))
-        retLst=[nickName,content,msgTime]
-    except Exception as e:
-        pass
-    return retLst
-
-
-def testRoomid(roomid):
-    if not roomid:
-        roomid = input('roomid:')
-        with open(INIT_PROPERTIES, 'r') as f:
-            init = f.readlines()
-            editInit = ''
-            for i in init:
-                if 'roomid' in i:
-                    i = i[:-1] + str(roomid)
-                editInit += i + '\n'
-        with open(INIT_PROPERTIES, 'w') as f:
-            f.write(''.join(editInit))
-    return roomid
+# def testRoomid(roomid):
+#     if not roomid:
+#         roomid = input('roomid:')
+#         with open(INIT_PROPERTIES, 'r') as f:
+#             init = f.readlines()
+#             editInit = ''
+#             for i in init:
+#                 if 'roomid' in i:
+#                     i = i[:-1] + str(roomid)
+#                 editInit += i + '\n'
+#         with open(INIT_PROPERTIES, 'w') as f:
+#             f.write(''.join(editInit))
+#     return roomid
 
 
 def main(idolid):
@@ -233,4 +233,4 @@ def main(idolid):
 if __name__ == '__main__':
     idolid= sys.argv[1] if len(sys.argv)>1 else '10013'
     main(idolid)
-    #python3 pandaTVDanmu.py 10003
+    #python3 pandaTVDanmu.py 10091
