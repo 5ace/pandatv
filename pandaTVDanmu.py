@@ -114,23 +114,20 @@ def getChatInfo(roomid):
         #s.send(b'\x00\x06\x00\x00')
         #print(s.recv(4))
         threading.Thread(target=keepalive,args=(s,)).start()
-
-        startTime=str(int(1440*(int(time.time())/1440)))
+        localTime=time.localtime()
+        startTime=str(localTime.tm_year)+'_'+str(localTime.tm_mon)+'_'+str(localTime.tm_mday)
+        sqlTableName='TM'+startTime+'RD'+roomid
         conn = sqlite3.connect('pandadanmu.db')
         cursor = conn.cursor()
-        sqlTableName='TM'+startTime+'RD'+roomid
-        strEx='create table '+sqlTableName+\
-        ' (time int(10), name varchar(10), word varchar(50))'
-        cursor.execute(strEx)
+        try:
+                strEx='create table '+sqlTableName+\
+                ' (time int(10), name varchar(10), word varchar(50))'
+                cursor.execute(strEx)
+        except(sqlite3.OperationalError):
+                print('===数据库表单存在===')
         cursor.close()
         conn.commit()
         conn.close()
-        txtGet='时间：'+time.ctime()+'房间号：'+roomid+'\n'+\
-        '完整弹幕获取代码，请粘贴后右键到CMD：\n'+\
-        'python '+sqlTableName
-        writefile = open('log.txt',"w")
-        writefile.writelines(txtGet)
-        writefile.close()
         contentMsg=list()
         snickMsg=list()
         LocalMsgTime=list()
